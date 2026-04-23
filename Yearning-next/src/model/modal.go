@@ -56,6 +56,8 @@ type CoreAccount struct {
 	RealName   string `gorm:"type:varchar(50);" json:"real_name"`
 	Email      string `gorm:"type:varchar(50);" json:"email"`
 	IsRecorder uint   `gorm:"type:tinyint(2) not null default 2" json:"is_recorder"`
+	MFASecret  string `gorm:"type:varchar(100);default:''" json:"-"`
+	MFAEnabled bool   `gorm:"type:tinyint(1);default:0" json:"mfa_enabled"`
 }
 
 type CoreGlobalConfiguration struct {
@@ -216,4 +218,13 @@ type CoreTotalTickets struct {
 	Date       string `gorm:"type:varchar(50);not null;index:date_idx" json:"date"`
 	TotalOrder int64  `gorm:"type:int(50);not null" json:"total_order"`
 	TotalQuery int64  `gorm:"type:int(50);not null" json:"total_query"`
+}
+
+type CoreBatchOrder struct {
+	ID       uint   `gorm:"primary_key;AUTO_INCREMENT" json:"id"`
+	BatchId  string `gorm:"type:varchar(50);not null;index:batch_idx" json:"batch_id"`
+	WorkIds  JSON   `gorm:"type:json" json:"work_ids"`
+	Username string `gorm:"type:varchar(50);not null" json:"username"`
+	Date     string `gorm:"type:varchar(50);not null" json:"date"`
+	Status   uint   `gorm:"type:tinyint(2);not null;default:2" json:"status"`
 }

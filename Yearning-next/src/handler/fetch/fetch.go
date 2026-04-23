@@ -232,26 +232,33 @@ func FetchSQLTest(c yee.Context) (err error) {
 		return c.JSON(http.StatusOK, common.ERR_COMMON_MESSAGE(err))
 	}
 	var rs []engine.Record
-	if client := calls.NewRpc(); client != nil {
-		if err := client.Call("Engine.Check", engine.CheckArgs{
-			SQL:      u.SQL,
-			Schema:   u.Database,
-			IP:       s.IP,
-			Username: s.Username,
-			Port:     s.Port,
-			Password: enc.Decrypt(model.C.General.SecretKey, s.Password),
-			CA:       s.CAFile,
-			Cert:     s.Cert,
-			Key:      s.KeyFile,
-			Kind:     u.Kind,
-			Lang:     model.C.General.Lang,
-			Rule:     *rule,
-		}, &rs); err != nil {
-			return c.JSON(http.StatusOK, common.ERR_COMMON_MESSAGE(err))
-		}
+	client := calls.NewRpc()
+	if client == nil {
+		rs = append(rs, engine.Record{
+			SQL:    u.SQL,
+			Level:  0,
+			Status: "warn",
+			Error:  "SQL引擎未启动，跳过语法检测。请确认 Juno 引擎已运行在 " + model.C.General.RpcAddr,
+		})
 		return c.JSON(http.StatusOK, common.SuccessPayload(rs))
 	}
-	return c.JSON(http.StatusOK, common.ERR_COMMON_MESSAGE(fmt.Errorf("client is nil")))
+	if err := client.Call("Engine.Check", engine.CheckArgs{
+		SQL:      u.SQL,
+		Schema:   u.Database,
+		IP:       s.IP,
+		Username: s.Username,
+		Port:     s.Port,
+		Password: enc.Decrypt(model.C.General.SecretKey, s.Password),
+		CA:       s.CAFile,
+		Cert:     s.Cert,
+		Key:      s.KeyFile,
+		Kind:     u.Kind,
+		Lang:     model.C.General.Lang,
+		Rule:     *rule,
+	}, &rs); err != nil {
+		return c.JSON(http.StatusOK, common.ERR_COMMON_MESSAGE(err))
+	}
+	return c.JSON(http.StatusOK, common.SuccessPayload(rs))
 }
 
 func FetchOrderDetailList(c yee.Context) (err error) {

@@ -4,6 +4,8 @@
     :size="props.size"
     :data-source="props.tblRef.data"
     :loading="loading"
+    :row-key="props.rowKey || 'work_id'"
+    :row-selection="props.rowSelection"
     :pagination="{
       total: props.tblRef.pageCount,
       showTotal: (total:number) => $t('common.count', { count: total }),
@@ -31,6 +33,8 @@
     bordered?: boolean;
     size?: string;
     isAll?: boolean;
+    rowSelection?: any;
+    rowKey?: string;
   }
 
   const handleResizeColumn = (w: number, col: { width: number }) => {

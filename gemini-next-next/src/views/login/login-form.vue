@@ -18,6 +18,15 @@
         @press-enter="() => userSignIn()"
       />
     </a-form-item>
+    <a-form-item v-if="mfaRequired">
+      <a-input
+        v-model:value="loginForm.mfa_code"
+        placeholder="MFA验证码"
+        style="border-radius: 10px"
+        :maxlength="6"
+        @press-enter="() => userSignIn()"
+      />
+    </a-form-item>
     <a-form-item>
       <a-space :size="50">
         <a-checkbox v-model:checked="loginForm.is_ldap">
@@ -53,6 +62,7 @@
     password: '',
     is_ldap: false,
     is_oidc: false,
+    mfa_code: '',
   });
 
   const store = useStore();
@@ -60,6 +70,7 @@
 
   const oidcEnabled = ref(false);
   const oidcSignInUrl = ref('');
+  const mfaRequired = ref(false);
 
   const query = computed(() => route.query).value;
 
@@ -87,6 +98,10 @@
 
   const userSignIn = debounce(async () => {
     const { data } = await signIn(loginForm);
+    if (data.code === 1300) {
+      mfaRequired.value = true;
+      return;
+    }
     if (data.code === 1301) {
       return;
     }

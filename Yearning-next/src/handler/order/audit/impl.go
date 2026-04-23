@@ -41,6 +41,22 @@ type Confirm struct {
 	Delay    string `json:"delay"`
 }
 
+type BatchConfirm struct {
+	WorkIds []string `json:"work_ids"`
+	Tp      string   `json:"tp"`
+	Text    string   `json:"text"`
+}
+
+type BatchResult struct {
+	Success []string        `json:"success"`
+	Failed  []BatchFailItem `json:"failed"`
+}
+
+type BatchFailItem struct {
+	WorkId string `json:"work_id"`
+	Error  string `json:"error"`
+}
+
 func (e *Confirm) GetTPL() []flow.Tpl {
 	var s model.CoreDataSource
 	var tpl []flow.Tpl
@@ -91,7 +107,7 @@ func ExecuteOrder(u *Confirm, user string) common.Resp {
 		})
 		return common.SuccessPayLoadToMessage(i18n.DefaultLang.Load(i18n.ORDER_EXECUTE_STATE))
 	}
-	return common.ERR_COMMON_MESSAGE(fmt.Errorf("rpc client is nil"))
+	return common.ERR_COMMON_MESSAGE(fmt.Errorf("SQL引擎(Juno)未启动，无法执行工单。请确认引擎已运行在 %s", model.C.General.RpcAddr))
 
 }
 

@@ -1,5 +1,5 @@
 <template>
-  <a-row :gutter="24">
+  <a-row :gutter="24" align="middle">
     <a-col :xs="24" :md="8">
       <a-select
         v-model:value="selected"
@@ -21,6 +21,22 @@
         >
       </a-select>
     </a-col>
+    <a-col v-if="props.type !== 'query'" :xs="24" :md="16" style="text-align: right">
+      <a-space>
+        <a-checkbox
+          v-model:checked="batchMode"
+        >{{ $t('order.apply.batch.mode') }}</a-checkbox>
+        <template v-if="batchMode && selectedSources.length > 0">
+          <a-tag color="blue">{{ $t('order.apply.batch.selected', { count: selectedSources.length }) }}</a-tag>
+          <a-button type="primary" size="small" @click="goBatchOrder">
+            {{ $t('order.apply.batch.commit') }}
+          </a-button>
+          <a-button size="small" @click="selectedSources = []">
+            {{ $t('order.apply.batch.clear') }}
+          </a-button>
+        </template>
+      </a-space>
+    </a-col>
   </a-row>
   <br />
   <a-list
@@ -32,20 +48,14 @@
     <template #renderItem="{ item }">
       <a-list-item>
         <div
-          @click="
-            () =>
-              router.push({
-                path: props.type !== 'query' ? '/apply/order' : '/apply/query',
-                query: {
-                  type: props.id,
-                  idc: item.idc,
-                  source: item.source,
-                  source_id: item.source_id,
-                },
-              })
-          "
+          @click="batchMode ? toggleSelect(item) : goSingleOrder(item)"
         >
-          <a-card :body-style="{ paddingBottom: 20 }" hoverable>
+          <a-card
+            :body-style="{ paddingBottom: 20 }"
+            hoverable
+            :class="{ 'batch-selected': batchMode && isSelected(item) }"
+            :style="batchMode && isSelected(item) ? { borderColor: '#1890ff', borderWidth: '2px' } : {}"
+          >
             <a-card-meta :title="item.source">
               <template #description>{{
                 $t('order.apply.card.env', {
@@ -53,11 +63,19 @@
                 })
               }}</template>
               <template #avatar>
-                <a-avatar :style="{ backgroundColor: '#Ff9900' }">
-                  <template #icon>
-                    <CodepenCircleOutlined />
-                  </template>
-                </a-avatar>
+                <div style="position: relative">
+                  <a-avatar :style="{ backgroundColor: batchMode && isSelected(item) ? '#1890ff' : '#Ff9900' }">
+                    <template #icon>
+                      <CodepenCircleOutlined />
+                    </template>
+                  </a-avatar>
+                  <a-checkbox
+                    v-if="batchMode"
+                    :checked="isSelected(item)"
+                    style="position: absolute; top: -4px; left: -4px"
+                    @click.stop="toggleSelect(item)"
+                  />
+                </div>
               </template>
             </a-card-meta>
             <template #actions>
@@ -75,21 +93,7 @@
                 <a-tooltip :title="$t('order.apply.card.enter')">
                   <a
                     class="ant-dropdown-link"
-                    @click="
-                      () =>
-                        router.push({
-                          path:
-                            props.type !== 'query'
-                              ? '/apply/order'
-                              : '/apply/query',
-                          query: {
-                            type: props.id,
-                            idc: item.idc,
-                            source: item.source,
-                            source_id: item.source_id,
-                          },
-                        })
-                    "
+                    @click.stop="goSingleOrder(item)"
                   >
                     <EnterOutlined />
                   </a>
@@ -112,7 +116,10 @@
   } from '@ant-design/icons-vue';
   import { onMounted, ref } from 'vue';
   import { useRouter } from 'vue-router';
+  import { useI18n } from 'vue-i18n';
   import { ISource, querySourceList } from '@/apis/source';
+
+  const { t } = useI18n();
 
   const props = defineProps<{
     type: string;
@@ -127,6 +134,50 @@
 
   const pagination = {
     pageSize: 20,
+  };
+
+  const batchMode = ref(false);
+  const selectedSources = ref<ISource[]>([]);
+
+  const isSelected = (item: ISource) =>
+    selectedSources.value.some((s) => s.source_id === item.source_id);
+
+  const toggleSelect = (item: ISource) => {
+    if (isSelected(item)) {
+      selectedSources.value = selectedSources.value.filter(
+        (s) => s.source_id !== item.source_id
+      );
+    } else {
+      selectedSources.value = [...selectedSources.value, item];
+    }
+  };
+
+  const goSingleOrder = (item: ISource) => {
+    router.push({
+      path: props.type !== 'query' ? '/apply/order' : '/apply/query',
+      query: {
+        type: props.id,
+        idc: item.idc,
+        source: item.source,
+        source_id: item.source_id,
+      },
+    });
+  };
+
+  const goBatchOrder = () => {
+    if (selectedSources.value.length === 0) return;
+    const primary = selectedSources.value[0];
+    const batchIds = selectedSources.value.slice(1).map((s) => s.source_id);
+    router.push({
+      path: '/apply/order',
+      query: {
+        type: props.id,
+        idc: primary.idc,
+        source: primary.source,
+        source_id: primary.source_id,
+        batch_ids: batchIds.join(','),
+      },
+    });
   };
 
   const filterOption = (input: string, option: any) => {

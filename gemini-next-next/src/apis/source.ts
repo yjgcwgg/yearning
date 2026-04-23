@@ -21,6 +21,7 @@ export interface TableArch {
 export interface ISource {
   source: string;
   source_id: string;
+  idc?: string;
 }
 
 export interface IKindCount {

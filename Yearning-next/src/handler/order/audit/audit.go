@@ -40,6 +40,74 @@ func AuditOrderState(c yee.Context) (err error) {
 	}
 }
 
+func BatchAuditOrderState(c yee.Context) (err error) {
+	u := new(BatchConfirm)
+	user := new(factory.Token).JwtParse(c)
+	if err = c.Bind(u); err != nil {
+		c.Logger().Error(err.Error())
+		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE(i18n.DefaultLang.Load(i18n.ER_REQ_BIND)))
+	}
+
+	if len(u.WorkIds) == 0 {
+		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE("work_ids is empty"))
+	}
+
+	result := BatchResult{}
+
+	for _, workId := range u.WorkIds {
+		var order model.CoreSqlOrder
+		if err := model.DB().Select("source_id, current_step, status").
+			Where("work_id = ?", workId).First(&order).Error; err != nil {
+			result.Failed = append(result.Failed, BatchFailItem{
+				WorkId: workId, Error: "工单不存在",
+			})
+			continue
+		}
+
+		if order.Status != 2 {
+			result.Failed = append(result.Failed, BatchFailItem{
+				WorkId: workId, Error: "工单状态不是待审核",
+			})
+			continue
+		}
+
+		confirm := &Confirm{
+			WorkId:   workId,
+			Tp:       u.Tp,
+			Text:     u.Text,
+			SourceId: order.SourceId,
+			Flag:     order.CurrentStep,
+		}
+
+		switch u.Tp {
+		case "agree":
+			resp := MultiAuditOrder(confirm, user.Username)
+			if resp.Code != 1200 {
+				result.Failed = append(result.Failed, BatchFailItem{
+					WorkId: workId, Error: resp.Text,
+				})
+			} else {
+				result.Success = append(result.Success, workId)
+			}
+		case "reject":
+			resp := RejectOrder(confirm, user.Username)
+			if resp.Code != 1200 {
+				result.Failed = append(result.Failed, BatchFailItem{
+					WorkId: workId, Error: resp.Text,
+				})
+			} else {
+				result.Success = append(result.Success, workId)
+			}
+		default:
+			result.Failed = append(result.Failed, BatchFailItem{
+				WorkId: workId, Error: "不支持的操作类型",
+			})
+		}
+	}
+
+	return c.JSON(http.StatusOK, common.SuccessPayload(result))
+}
+
 func ScheduledChange(c yee.Context) (err error) {
 	u := new(Confirm)
 	if err = c.Bind(u); err != nil {
@@ -145,6 +213,8 @@ func AuditOrderApis(c yee.Context) (err error) {
 		return DelayKill(c)
 	case "scheduled":
 		return ScheduledChange(c)
+	case "batch":
+		return BatchAuditOrderState(c)
 	default:
 		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE(i18n.DefaultLang.Load(i18n.ER_REQ_FAKE)))
 	}

@@ -44,6 +44,12 @@ export default {
   'order.apply.commit.title': 'Fill in',
   'order.apply.commit.desc':
     'Fill in the submission information and test the SQL',
+  'order.apply.batch.label': 'Batch Sources',
+  'order.apply.batch.placeholder': 'Select additional sources (optional)',
+  'order.apply.batch.commit': 'Batch Submit',
+  'order.apply.batch.mode': 'Batch Select',
+  'order.apply.batch.selected': '{count} source(s) selected',
+  'order.apply.batch.clear': 'Clear',
 
   'order.state.all': 'All',
   'order.state.success': 'Done',
@@ -71,6 +77,15 @@ export default {
   'order.reject': 'Rejected',
   'order.end': 'End',
   'order.roll.tips': 'SQL must not be empty',
+  'order.batch.selected': '{count} selected',
+  'order.batch.agree': 'Batch Agree',
+  'order.batch.reject': 'Batch Reject',
+  'order.batch.cancel': 'Clear',
+  'order.batch.agree.confirm': 'Confirm batch agree {count} orders?',
+  'order.batch.reject.reason': 'Reject Reason',
+  'order.batch.reject.placeholder': 'Please enter reject reason',
+  'order.batch.result': 'Done: {success} succeeded, {failed} failed',
+
   'order.order.title': 'Order Audit',
   'order.delay': 'Schedule',
   'order.change': 'Change',

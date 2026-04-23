@@ -121,4 +121,17 @@ export default {
   'common.lang.us': 'English',
   'common.lang.cn': '中文',
   'common.help': 'Help',
+
+  'profile.mfa.title': 'Multi-Factor Authentication (MFA)',
+  'profile.mfa.disabled': 'MFA is not enabled. Enable it to improve account security',
+  'profile.mfa.enabled': 'MFA is enabled',
+  'profile.mfa.enable': 'Enable MFA',
+  'profile.mfa.disable': 'Disable MFA',
+  'profile.mfa.scan.hint': 'Scan the QR code with your Authenticator app',
+  'profile.mfa.secret': 'Secret (manual entry)',
+  'profile.mfa.code': 'Verification Code',
+  'profile.mfa.code.placeholder': 'Enter 6-digit code',
+  'profile.mfa.code.invalid': 'Please enter a valid 6-digit code',
+  'profile.mfa.confirm': 'Confirm',
+  'profile.mfa.disable.placeholder': 'Enter current code to disable MFA',
 };

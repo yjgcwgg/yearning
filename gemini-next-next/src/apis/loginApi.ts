@@ -5,6 +5,7 @@ export interface LoginFrom {
   password: string;
   is_ldap: boolean;
   is_oidc: boolean;
+  mfa_code?: string;
 }
 
 export function signIn(login: LoginFrom) {

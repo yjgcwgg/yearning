@@ -132,8 +132,22 @@ export function signUpUser(register: RegisterForm, isManager: boolean) {
   );
 }
 
-// export function queryMargeGroup(groups: string[]) {
-//   return request.get(`${COMMON_URI}/manage/policy`, {
-//     params: { group: groups.join(',') },
-//   });
-// }
+export function mfaSetup() {
+  return request.post<Res<{ secret: string; qr_code: string }>>(
+    `${COMMON_URI}/common/mfa_setup`
+  );
+}
+
+export function mfaVerify(code: string) {
+  return request.post(`${COMMON_URI}/common/mfa_verify`, { code });
+}
+
+export function mfaDisable(code: string) {
+  return request.post(`${COMMON_URI}/common/mfa_disable`, { code });
+}
+
+export function mfaStatus() {
+  return request.get<Res<{ mfa_enabled: boolean }>>(
+    `${COMMON_URI}/common/mfa_status`
+  );
+}

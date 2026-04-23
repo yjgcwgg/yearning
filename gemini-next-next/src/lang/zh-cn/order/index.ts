@@ -41,6 +41,12 @@ export default {
 
   'order.apply.commit.title': '工单填写',
   'order.apply.commit.desc': '填写提交信息并对SQL进行检测',
+  'order.apply.batch.label': '批量数据源',
+  'order.apply.batch.placeholder': '选择额外数据源（可选）',
+  'order.apply.batch.commit': '批量提交',
+  'order.apply.batch.mode': '批量选择',
+  'order.apply.batch.selected': '已选 {count} 个数据源',
+  'order.apply.batch.clear': '清空选择',
 
   'order.state.all': '全部',
   'order.state.success': '完成',
@@ -67,6 +73,15 @@ export default {
   'order.reject.tips': '确认驳回工单?',
   'order.end': '结束',
   'order.roll.tips': '回滚语句提交不得为空',
+
+  'order.batch.selected': '已选择 {count} 项',
+  'order.batch.agree': '批量同意',
+  'order.batch.reject': '批量驳回',
+  'order.batch.cancel': '取消选择',
+  'order.batch.agree.confirm': '确认批量同意 {count} 个工单?',
+  'order.batch.reject.reason': '驳回理由',
+  'order.batch.reject.placeholder': '请输入驳回理由',
+  'order.batch.result': '操作完成：成功 {success} 个，失败 {failed} 个',
 
   'order.order.title': '工单审批',
   'order.delay': '定时更改',

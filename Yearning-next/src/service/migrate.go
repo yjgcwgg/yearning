@@ -192,6 +192,7 @@ func Migrate() {
 		_ = model.DB().AutoMigrate(&model.CoreOrderComment{})
 		_ = model.DB().AutoMigrate(&model.CoreRules{})
 		_ = model.DB().AutoMigrate(&model.CoreTotalTickets{})
+		_ = model.DB().AutoMigrate(&model.CoreBatchOrder{})
 		o := engine.AuditRole{
 			DMLInsertColumns:               false,
 			DMLMaxInsertRows:               10,
@@ -300,6 +301,7 @@ func UpdateData() {
 	_ = model.DB().AutoMigrate(&model.CoreOrderComment{})
 	_ = model.DB().AutoMigrate(&model.CoreRules{})
 	_ = model.DB().AutoMigrate(&model.CoreTotalTickets{})
+	_ = model.DB().AutoMigrate(&model.CoreBatchOrder{})
 	if model.DB().Migrator().HasColumn(&model.CoreAutoTask{}, "base") {
 		_ = model.DB().Migrator().RenameColumn(&model.CoreAutoTask{}, "base", "data_base")
 	}

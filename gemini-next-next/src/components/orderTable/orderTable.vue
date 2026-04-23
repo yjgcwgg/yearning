@@ -11,7 +11,46 @@
         "
       >
       </order-table-search>
-      <c-table ref="tbl" :tbl-ref="tblRef" :size="props.size">
+
+      <div
+        v-if="isAudit === 'audit' && selectedRowKeys.length > 0"
+        style="
+          margin-bottom: 16px;
+          padding: 8px 16px;
+          background: #e6f7ff;
+          border: 1px solid #91d5ff;
+          border-radius: 4px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        "
+      >
+        <span>{{ $t('order.batch.selected', { count: selectedRowKeys.length }) }}</span>
+        <a-button type="primary" size="small" @click="batchAgree">{{
+          $t('order.batch.agree')
+        }}</a-button>
+        <a-button danger size="small" @click="showBatchReject">{{
+          $t('order.batch.reject')
+        }}</a-button>
+        <a-button size="small" @click="clearSelection">{{
+          $t('order.batch.cancel')
+        }}</a-button>
+      </div>
+
+      <c-table
+        ref="tbl"
+        :tbl-ref="tblRef"
+        :size="props.size"
+        :row-selection="
+          isAudit === 'audit'
+            ? {
+                selectedRowKeys: selectedRowKeys,
+                onChange: onSelectChange,
+                getCheckboxProps: getCheckboxProps,
+              }
+            : undefined
+        "
+      >
         <template #bodyCell="{ column, text, record }">
           <template v-if="column.dataIndex === 'type'">
             <span>{{ text === 0 ? 'DDL' : 'DML' }}</span>
@@ -52,6 +91,20 @@
       @close-drawer="() => (visible = false)"
     />
     <Delay ref="delay" />
+
+    <a-modal
+      v-model:visible="batchRejectVisible"
+      :title="$t('order.batch.reject')"
+      @ok="confirmBatchReject"
+    >
+      <a-form-item :label="$t('order.batch.reject.reason')">
+        <a-textarea
+          v-model:value="batchRejectText"
+          :rows="3"
+          :placeholder="$t('order.batch.reject.placeholder')"
+        ></a-textarea>
+      </a-form-item>
+    </a-modal>
   </div>
 </template>
 
@@ -60,7 +113,12 @@
   import OrderTableSearch from './orderTableSearch.vue';
   import { onBeforeRouteUpdate, useRoute } from 'vue-router';
   import { onMounted, reactive, ref } from 'vue';
-  import { OrderExpr, OrderParams, checkUri } from '@/apis/orderPostApis';
+  import {
+    OrderExpr,
+    OrderParams,
+    checkUri,
+    batchAuditOrder,
+  } from '@/apis/orderPostApis';
   import { OrderTableData, OrderState } from '@/types';
   import { useStore } from '@/store';
   import { useI18n } from 'vue-i18n';
@@ -69,6 +127,7 @@
   import { checkSchema } from '@/lib';
   import Profile from '@/components/orderProfile/index.vue';
   import Delay from './delay.vue';
+  import { message, Modal } from 'ant-design-vue';
 
   interface propsAttr {
     size?: string;
@@ -99,6 +158,83 @@
   const tbl = ref();
 
   const isAudit = ref('');
+
+  const selectedRowKeys = ref<string[]>([]);
+
+  const batchRejectVisible = ref(false);
+
+  const batchRejectText = ref('');
+
+  const onSelectChange = (keys: string[]) => {
+    selectedRowKeys.value = keys;
+  };
+
+  const getCheckboxProps = (record: OrderTableData) => ({
+    disabled:
+      record.status !== 2 ||
+      !record.assigned.split(',').includes(store.state.user.account.user),
+  });
+
+  const clearSelection = () => {
+    selectedRowKeys.value = [];
+  };
+
+  const batchAgree = () => {
+    Modal.confirm({
+      title: t('order.batch.agree.confirm', {
+        count: selectedRowKeys.value.length,
+      }),
+      onOk: async () => {
+        const { data } = await batchAuditOrder({
+          work_ids: selectedRowKeys.value,
+          tp: 'agree',
+        });
+        const result = data.payload;
+        const successCount = result.success ? result.success.length : 0;
+        const failedCount = result.failed ? result.failed.length : 0;
+        message.info(
+          t('order.batch.result', {
+            success: successCount,
+            failed: failedCount,
+          })
+        );
+        if (failedCount > 0) {
+          result.failed.forEach((item) => {
+            message.error(`${item.work_id}: ${item.error}`);
+          });
+        }
+        clearSelection();
+        tbl.value.manual();
+      },
+    });
+  };
+
+  const showBatchReject = () => {
+    batchRejectText.value = '';
+    batchRejectVisible.value = true;
+  };
+
+  const confirmBatchReject = async () => {
+    const { data } = await batchAuditOrder({
+      work_ids: selectedRowKeys.value,
+      tp: 'reject',
+      text: batchRejectText.value,
+    });
+    const result = data.payload;
+    const successCount = result.success ? result.success.length : 0;
+    const failedCount = result.failed ? result.failed.length : 0;
+    message.info(
+      t('order.batch.result', { success: successCount, failed: failedCount })
+    );
+    if (failedCount > 0) {
+      result.failed.forEach((item) => {
+        message.error(`${item.work_id}: ${item.error}`);
+      });
+    }
+    batchRejectVisible.value = false;
+    clearSelection();
+    tbl.value.manual();
+  };
 
   const tblRef = reactive<tableRef>({
     col: [

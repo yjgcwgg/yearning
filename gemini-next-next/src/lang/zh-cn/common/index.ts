@@ -125,4 +125,17 @@ export default {
   'common.lang.us': 'English',
   'common.lang.cn': '中文',
   'common.help': '帮助文档',
+
+  'profile.mfa.title': '多因子认证 (MFA)',
+  'profile.mfa.disabled': 'MFA 未启用，建议开启以提升账户安全性',
+  'profile.mfa.enabled': 'MFA 已启用',
+  'profile.mfa.enable': '启用 MFA',
+  'profile.mfa.disable': '关闭 MFA',
+  'profile.mfa.scan.hint': '请使用 Authenticator 应用扫描二维码',
+  'profile.mfa.secret': '密钥（手动输入）',
+  'profile.mfa.code': '验证码',
+  'profile.mfa.code.placeholder': '请输入6位验证码',
+  'profile.mfa.code.invalid': '请输入有效的6位验证码',
+  'profile.mfa.confirm': '确认绑定',
+  'profile.mfa.disable.placeholder': '输入当前验证码以关闭MFA',
 };

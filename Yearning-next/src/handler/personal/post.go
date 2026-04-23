@@ -35,8 +35,16 @@ func Post(c yee.Context) (err error) {
 	switch c.Params("tp") {
 	case "post":
 		return sqlOrderPost(c)
+	case "batch_post":
+		return sqlBatchOrderPost(c)
 	case "edit":
 		return editPersonalUser(c)
+	case "mfa_setup":
+		return MFASetup(c)
+	case "mfa_verify":
+		return MFAVerify(c)
+	case "mfa_disable":
+		return MFADisable(c)
 	}
 	return err
 }
@@ -71,6 +79,107 @@ func sqlOrderPost(c yee.Context) (err error) {
 	}
 
 	return c.JSON(http.StatusOK, common.SuccessPayLoadToMessage(i18n.DefaultLang.Load(i18n.ORDER_POST_SUCCESS)))
+}
+
+type BatchOrderReq struct {
+	SourceIds []string `json:"source_ids"`
+	SQL       string   `json:"sql"`
+	Text      string   `json:"text"`
+	Type      int      `json:"type"`
+	Backup    uint     `json:"backup"`
+	DataBase  string   `json:"data_base"`
+	Table     string   `json:"table"`
+	Delay     string   `json:"delay"`
+}
+
+type BatchOrderResult struct {
+	BatchId string   `json:"batch_id"`
+	WorkIds []string `json:"work_ids"`
+	Skipped []string `json:"skipped"`
+}
+
+func sqlBatchOrderPost(c yee.Context) (err error) {
+	req := new(BatchOrderReq)
+	user := new(factory.Token).JwtParse(c).Username
+	if err = c.Bind(req); err != nil {
+		c.Logger().Error(err.Error())
+		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE(i18n.DefaultLang.Load(i18n.ER_REQ_BIND)))
+	}
+
+	if len(req.SourceIds) == 0 {
+		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE("source_ids is empty"))
+	}
+
+	batchId := factory.GenWorkId()
+	result := BatchOrderResult{BatchId: batchId}
+
+	for _, sourceId := range req.SourceIds {
+		order := &model.CoreSqlOrder{
+			SourceId: sourceId,
+			SQL:      req.SQL,
+			Text:     req.Text,
+			Type:     req.Type,
+			Backup:   req.Backup,
+			DataBase: req.DataBase,
+			Table:    req.Table,
+			Delay:    req.Delay,
+		}
+
+		if !permission.NewPermissionService(model.DB()).Equal(&permission.Control{User: user, Kind: order.Type, SourceId: sourceId}) {
+			result.Skipped = append(result.Skipped, sourceId)
+			continue
+		}
+
+		step, err := wrapperPostOrderInfo(order, c)
+		if err != nil || step < 2 {
+			result.Skipped = append(result.Skipped, sourceId)
+			continue
+		}
+
+		order.ID = 0
+		model.DB().Create(order)
+		model.DB().Create(&model.CoreWorkflowDetail{
+			WorkId:   order.WorkId,
+			Username: user,
+			Action:   i18n.DefaultLang.Load(i18n.INFO_SUBMITTED),
+			Time:     time.Now().Format("2006-01-02 15:04"),
+		})
+		pusher.NewMessagePusher(order.WorkId).Order().OrderBuild(pusher.SummitStatus).Push()
+
+		if order.Type == vars.DML {
+			autoTask(order, step)
+		}
+
+		result.WorkIds = append(result.WorkIds, order.WorkId)
+	}
+
+	model.DB().Create(&model.CoreBatchOrder{
+		BatchId:  batchId,
+		WorkIds:  factory.JsonStringify(result.WorkIds),
+		Username: user,
+		Date:     time.Now().Format("2006-01-02 15:04"),
+		Status:   2,
+	})
+
+	return c.JSON(http.StatusOK, common.SuccessPayload(result))
+}
+
+func GetBatchOrderDetail(c yee.Context) (err error) {
+	batchId := c.QueryParam("batch_id")
+	var batch model.CoreBatchOrder
+	model.DB().Where("batch_id = ?", batchId).First(&batch)
+
+	var workIds []string
+	_ = json.Unmarshal(batch.WorkIds, &workIds)
+
+	var orders []model.CoreSqlOrder
+	model.DB().Select("work_id, username, text, date, real_name, status, type, source, source_id, data_base, assigned, current_step").
+		Where("work_id IN ?", workIds).Find(&orders)
+
+	return c.JSON(http.StatusOK, common.SuccessPayload(map[string]interface{}{
+		"batch":  batch,
+		"orders": orders,
+	}))
 }
 
 func wrapperPostOrderInfo(order *model.CoreSqlOrder, y yee.Context) (length int, err error) {

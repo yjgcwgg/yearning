@@ -87,6 +87,10 @@ func GET(c yee.Context) (err error) {
 	switch c.Params("tp") {
 	case "list":
 		return PersonalFetchMyOrder(c)
+	case "batch":
+		return GetBatchOrderDetail(c)
+	case "mfa_status":
+		return MFAStatus(c)
 	default:
 		return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE(i18n.DefaultLang.Load(i18n.ER_REQ_FAKE)))
 	}

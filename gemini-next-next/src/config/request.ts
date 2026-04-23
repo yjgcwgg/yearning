@@ -52,7 +52,7 @@ const responseInject = (res: Res<never>) => {
     });
   }
 
-  if (res.code > 1200) {
+  if (res.code > 1200 && res.code !== 1300) {
     notification.error({
       message: t('common.session.state') + `:${res.code}`,
       description: res.text,

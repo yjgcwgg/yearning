@@ -128,6 +128,59 @@ export function postOrderComment(args: Comment) {
   return request.post(`${COMMON_URI}/fetch/comment`, args);
 }
 
+export interface BatchAuditParams {
+  work_ids: string[];
+  tp: 'agree' | 'reject';
+  text?: string;
+}
+
+export interface BatchFailItem {
+  work_id: string;
+  error: string;
+}
+
+export interface BatchAuditResult {
+  success: string[];
+  failed: BatchFailItem[];
+}
+
+export function batchAuditOrder(params: BatchAuditParams) {
+  return request.post<Res<BatchAuditResult>>(
+    `${COMMON_URI}/audit/order/batch`,
+    params
+  );
+}
+
+export interface BatchOrderPostParams {
+  source_ids: string[];
+  sql: string;
+  text: string;
+  type: number;
+  backup: number;
+  data_base: string;
+  table: string;
+  delay: string;
+}
+
+export interface BatchOrderPostResult {
+  batch_id: string;
+  work_ids: string[];
+  skipped: string[];
+}
+
+export function batchOrderPost(params: BatchOrderPostParams) {
+  return request.post<Res<BatchOrderPostResult>>(
+    `${COMMON_URI}/common/batch_post`,
+    params
+  );
+}
+
+export function getBatchDetail(batchId: string) {
+  return request.get(`${COMMON_URI}/common/batch`, {
+    params: { batch_id: batchId },
+  });
+}
+
 export class Request {
   //   Test(params: SQLTestParams): AxiosPromise {
   //     return request({

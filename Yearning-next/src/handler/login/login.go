@@ -22,6 +22,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/cookieY/yee"
+	"github.com/pquerna/otp/totp"
 	"gorm.io/gorm"
 	"net/http"
 )
@@ -55,6 +56,21 @@ func UserLdapLogin(c yee.Context) (err error) {
 			})
 			ix, _ := json.Marshal([]string{})
 			model.DB().Create(&model.CoreGrained{Username: u.Username, Group: ix})
+			model.DB().Where("username = ?", u.Username).First(&account)
+		}
+
+		if account.MFAEnabled {
+			if u.MFACode == "" {
+				return c.JSON(http.StatusOK, common.Resp{
+					Code: 1300,
+					Payload: map[string]interface{}{
+						"require_mfa": true,
+					},
+				})
+			}
+			if !totp.Validate(u.MFACode, account.MFASecret) {
+				return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE("MFA 验证码错误"))
+			}
 		}
 
 		token, tokenErr := factory.JwtAuth(factory.Token{
@@ -89,6 +105,20 @@ func UserGeneralLogin(c yee.Context) (err error) {
 			return c.JSON(http.StatusOK, common.ERR_COMMON_MESSAGE(errors.New(i18n.DefaultLang.Load(i18n.ER_LOGIN))))
 		}
 		if factory.DjangoCheckPassword(&account, u.Password) {
+			if account.MFAEnabled {
+				if u.MFACode == "" {
+					return c.JSON(http.StatusOK, common.Resp{
+						Code: 1300,
+						Payload: map[string]interface{}{
+							"require_mfa": true,
+						},
+					})
+				}
+				if !totp.Validate(u.MFACode, account.MFASecret) {
+					return c.JSON(http.StatusOK, common.ERR_COMMON_TEXT_MESSAGE("MFA 验证码错误"))
+				}
+			}
+
 			token, tokenErr := factory.JwtAuth(factory.Token{
 				Username: u.Username,
 				RealName: account.RealName,

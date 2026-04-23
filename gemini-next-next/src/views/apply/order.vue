@@ -67,6 +67,26 @@
               <a-radio :value="0">{{ $t('common.no') }}</a-radio>
             </a-radio-group>
           </a-form-item>
+          <a-form-item :label="$t('order.apply.batch.label')">
+            <a-select
+              v-model:value="batchSourceIds"
+              mode="multiple"
+              :placeholder="$t('order.apply.batch.placeholder')"
+              :dropdown-match-select-width="false"
+              show-search
+              allow-clear
+              :filter-option="filterSourceOption"
+            >
+              <a-select-option
+                v-for="s in availableSources"
+                :key="s.source_id"
+                :value="s.source_id"
+                :disabled="s.source_id === orderItems.source_id"
+              >
+                {{ s.source }}
+              </a-select-option>
+            </a-select>
+          </a-form-item>
           <a-form-item :label="$t('common.action')">
             <a-space>
               <a-button :loading="loadingTblBtn" @click="fetchTableArch">{{
@@ -76,7 +96,7 @@
                 :loading="loadingPostBtn"
                 :disabled="enabled"
                 @click="postOrder"
-                >{{ $t('common.commit') }}</a-button
+                >{{ batchSourceIds.length > 0 ? $t('order.apply.batch.commit') : $t('common.commit') }}</a-button
               >
             </a-space>
           </a-form-item>
@@ -171,6 +191,8 @@
     queryTableArch,
     queryTimeline,
     queryHighlight,
+    querySourceList,
+    ISource,
   } from '@/apis/source';
   import dayjs, { Dayjs } from 'dayjs';
   import { message, Modal } from 'ant-design-vue';
@@ -178,6 +200,7 @@
     checkSQLS,
     SQLTestParams,
     userPostOrder,
+    batchOrderPost,
   } from '@/apis/orderPostApis';
   import CommonMixins from '@/mixins/common';
   import router from '@/router';
@@ -234,6 +257,18 @@
   const { orderProfileArch, editor } = FetchMixins();
 
   const nonFields = ref([] as any[]);
+
+  const batchSourceIds = ref<string[]>([]);
+  const availableSources = ref<ISource[]>([]);
+
+  const filterSourceOption = (input: string, option: any) => {
+    const source = availableSources.value.find(
+      (s) => s.source_id === option.value
+    );
+    return source
+      ? source.source.toLowerCase().includes(input.toLowerCase())
+      : false;
+  };
 
   const disabledDate = (current: Dayjs) => {
     // Can not select days before today and today
@@ -301,22 +336,26 @@
       return;
     }
     spin.value = !spin.value;
-    const { data } = await checkSQLS({
-      source_id: orderItems.source_id,
-      kind: orderItems.type,
-      data_base: orderItems.data_base,
-      sql: sql,
-    } as SQLTestParams);
-    let counter = 0;
-    tData.value = data.payload;
-    tData.value.forEach((item: SQLTesting) => {
-      if (item.level !== 0) {
-        counter++;
-      }
-    });
-
-    enabled.value = counter !== 0;
-    spin.value = !spin.value;
+    try {
+      const { data } = await checkSQLS({
+        source_id: orderItems.source_id,
+        kind: orderItems.type,
+        data_base: orderItems.data_base,
+        sql: sql,
+      } as SQLTestParams);
+      let counter = 0;
+      tData.value = data.payload || [];
+      tData.value.forEach((item: SQLTesting) => {
+        if (item.level !== 0) {
+          counter++;
+        }
+      });
+      enabled.value = counter !== 0;
+    } catch {
+      enabled.value = false;
+    } finally {
+      spin.value = false;
+    }
   }, 200);
 
   const postOrder = () => {
@@ -329,7 +368,36 @@
         orderProfileArch.timeline.forEach((item) => {
           wrapper.relevant = wrapper.relevant.concat(item.auditor);
         });
-        await userPostOrder(wrapper);
+
+        if (batchSourceIds.value.length > 0) {
+          const allSourceIds = [
+            orderItems.source_id,
+            ...batchSourceIds.value,
+          ];
+          const { data: batchResp } = await batchOrderPost({
+            source_ids: allSourceIds,
+            sql: wrapper.sql || '',
+            text: wrapper.text,
+            type: wrapper.type as number,
+            backup: wrapper.backup,
+            data_base: wrapper.data_base,
+            table: wrapper.table,
+            delay: wrapper.delay || 'none',
+          });
+          const created = batchResp.payload.work_ids?.length || 0;
+          const skipped = batchResp.payload.skipped?.length || 0;
+          if (skipped > 0) {
+            message.warning(
+              `${t('order.apply.batch.commit')}: ${created} ${t('common.success')}, ${skipped} skipped`
+            );
+          } else {
+            message.success(
+              `${t('order.apply.batch.commit')}: ${created} ${t('common.success')}`
+            );
+          }
+        } else {
+          await userPostOrder(wrapper);
+        }
         enabled.value = true;
       })
       .catch(() => {
@@ -409,6 +477,19 @@
     fetchSchema();
     fetchTimeline();
     fetchHighLight();
+
+    const sourceType = orderItems.type === 0 ? 'ddl' : 'dml';
+    querySourceList(sourceType)
+      .then(({ data }) => {
+        if (data.code === 1200 && Array.isArray(data.payload)) {
+          availableSources.value = data.payload as ISource[];
+          const batchParam = route.query.batch_ids as string;
+          if (batchParam) {
+            batchSourceIds.value = batchParam.split(',').filter(Boolean);
+          }
+        }
+      })
+      .catch(() => {});
 
     route.query.remark === 'true'
       ? editor.value.ChangeEditorText(store.state.common.sql)
