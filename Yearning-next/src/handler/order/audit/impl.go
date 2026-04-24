@@ -86,16 +86,17 @@ func ExecuteOrder(u *Confirm, user string) common.Resp {
 	var isCall bool
 	if client := calls.NewRpc(); client != nil {
 		if err := client.Call("Engine.Exec", &ExecArgs{
-			Order:    &order,
-			Rules:    *rule,
-			IP:       source.IP,
-			Port:     source.Port,
-			Username: source.Username,
-			Password: enc.Decrypt(model.C.General.SecretKey, source.Password),
-			CA:       source.CAFile,
-			Cert:     source.Cert,
-			Key:      source.KeyFile,
-			Message:  model.GloMessage,
+			Order:         &order,
+			Rules:         *rule,
+			IP:            source.IP,
+			Port:          source.Port,
+			Username:      source.Username,
+			Password:      enc.Decrypt(model.C.General.SecretKey, source.Password),
+			CA:            source.CAFile,
+			Cert:          source.Cert,
+			Key:           source.KeyFile,
+			Message:       model.GloMessage,
+			MaxAffectRows: rule.MaxAffectRows,
 		}, &isCall); err != nil {
 			return common.ERR_COMMON_MESSAGE(err)
 		}
