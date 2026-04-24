@@ -29,6 +29,12 @@ func autoTask(order *model.CoreSqlOrder, length int) {
 	if err != nil {
 		logger.DefaultLogger.Error(err)
 	}
+	origBackup := order.Backup
+	if order.Type == 1 && order.Backup == 1 {
+		order.Backup = 0
+	} else if origBackup == 1 {
+		rule.PRIRollBack = true
+	}
 	if client := calls.NewRpc(); client != nil {
 		if err := client.Call("Engine.Exec", &audit.ExecArgs{
 			Order:         order,
@@ -44,6 +50,9 @@ func autoTask(order *model.CoreSqlOrder, length int) {
 		}
 	}
 	if isCall {
+		if order.Type == 1 && origBackup == 1 {
+			go audit.GenerateDMLRollback(&source, order.WorkId, order.DataBase, order.SQL)
+		}
 		model.DB().Create(&model.CoreWorkflowDetail{
 			WorkId:   order.WorkId,
 			Username: "AutoTask Robot",

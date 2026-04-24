@@ -9,10 +9,12 @@ import (
 	"Yearning-go/src/lib/enc"
 	"Yearning-go/src/lib/factory"
 	"Yearning-go/src/lib/pusher"
+	"Yearning-go/src/lib/vars"
 	"Yearning-go/src/model"
 	"encoding/json"
 	"fmt"
 	"github.com/cookieY/yee/logger"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -83,6 +85,13 @@ func ExecuteOrder(u *Confirm, user string) common.Resp {
 		logger.DefaultLogger.Error(err)
 	}
 
+	origBackup := order.Backup
+	if order.Type == vars.DML && order.Backup == 1 {
+		order.Backup = 0
+	} else if origBackup == 1 {
+		rule.PRIRollBack = true
+	}
+
 	var isCall bool
 	if client := calls.NewRpc(); client != nil {
 		if err := client.Call("Engine.Exec", &ExecArgs{
@@ -100,6 +109,11 @@ func ExecuteOrder(u *Confirm, user string) common.Resp {
 		}, &isCall); err != nil {
 			return common.ERR_COMMON_MESSAGE(err)
 		}
+
+		if order.Type == vars.DML && origBackup == 1 {
+			go GenerateDMLRollback(&source, u.WorkId, order.DataBase, order.SQL)
+		}
+
 		model.DB().Create(&model.CoreWorkflowDetail{
 			WorkId:   u.WorkId,
 			Username: user,
@@ -110,6 +124,74 @@ func ExecuteOrder(u *Confirm, user string) common.Resp {
 	}
 	return common.ERR_COMMON_MESSAGE(fmt.Errorf("SQL引擎(Juno)未启动，无法执行工单。请确认引擎已运行在 %s", model.C.General.RpcAddr))
 
+}
+
+func GenerateDMLRollback(source *model.CoreDataSource, workId, schema, sqlText string) {
+	db, err := source.ConnectDB(schema)
+	if err != nil {
+		logger.DefaultLogger.Error(fmt.Sprintf("rollback: connect target db failed: %v", err))
+		return
+	}
+	defer model.Close(db)
+
+	stmts := splitStatements(sqlText)
+	for _, stmt := range stmts {
+		rollSQL := generateReverseSQL(db, schema, stmt)
+		if rollSQL != "" {
+			model.DB().Create(&model.CoreRollback{WorkId: workId, SQL: rollSQL})
+		}
+	}
+}
+
+func splitStatements(sql string) []string {
+	var stmts []string
+	for _, s := range strings.Split(sql, ";") {
+		s = strings.TrimSpace(s)
+		if s != "" {
+			stmts = append(stmts, s)
+		}
+	}
+	return stmts
+}
+
+var reInsert = regexp.MustCompile(`(?i)^\s*INSERT\s+INTO\s+` + "`?" + `(\w+)` + "`?" + `\s*\(([^)]+)\)\s*(?:VALUE|VALUES)\s*\(([^)]+)\)`)
+
+func generateReverseSQL(db interface{}, schema, stmt string) string {
+	upper := strings.ToUpper(strings.TrimSpace(stmt))
+	if strings.HasPrefix(upper, "INSERT") {
+		return reverseInsert(schema, stmt)
+	}
+	if strings.HasPrefix(upper, "UPDATE") || strings.HasPrefix(upper, "DELETE") {
+		return fmt.Sprintf("-- [需手动回滚] 原语句: %s", stmt)
+	}
+	return ""
+}
+
+func reverseInsert(schema, stmt string) string {
+	m := reInsert.FindStringSubmatch(stmt)
+	if m == nil {
+		return fmt.Sprintf("-- [需手动回滚] 原语句: %s", stmt)
+	}
+	table := m[1]
+	cols := strings.Split(m[2], ",")
+	vals := strings.Split(m[3], ",")
+
+	if len(cols) != len(vals) {
+		return fmt.Sprintf("-- [需手动回滚] 原语句: %s", stmt)
+	}
+
+	var where []string
+	for i, col := range cols {
+		col = strings.TrimSpace(col)
+		col = strings.Trim(col, "`")
+		val := strings.TrimSpace(vals[i])
+		where = append(where, fmt.Sprintf("`%s` = %s", col, val))
+	}
+
+	if schema != "" {
+		return fmt.Sprintf("DELETE FROM `%s`.`%s` WHERE %s;", schema, table, strings.Join(where, " AND "))
+	}
+	return fmt.Sprintf("DELETE FROM `%s` WHERE %s;", table, strings.Join(where, " AND "))
 }
 
 func MultiAuditOrder(req *Confirm, user string) common.Resp {
@@ -146,6 +228,65 @@ func RejectOrder(req *Confirm, user string) common.Resp {
 	})
 	pusher.NewMessagePusher(req.WorkId).Order().OrderBuild(pusher.RejectStatus).Push()
 	return common.SuccessPayLoadToMessage(i18n.DefaultLang.Load(i18n.ORDER_REJECT_STATE))
+}
+
+type BatchCheckItem struct {
+	WorkId  string          `json:"work_id"`
+	Source  string          `json:"source"`
+	SQL     string          `json:"sql"`
+	Results []engine.Record `json:"results"`
+	Error   string          `json:"error"`
+}
+
+func BatchSQLCheck(workIds []string) []BatchCheckItem {
+	var items []BatchCheckItem
+	client := calls.NewRpc()
+
+	for _, workId := range workIds {
+		var order model.CoreSqlOrder
+		if err := model.DB().Where("work_id = ?", workId).First(&order).Error; err != nil {
+			items = append(items, BatchCheckItem{WorkId: workId, Error: "工单不存在"})
+			continue
+		}
+
+		var source model.CoreDataSource
+		model.DB().Where("source_id = ?", order.SourceId).First(&source)
+		rule, err := factory.CheckDataSourceRule(source.RuleId)
+		if err != nil {
+			items = append(items, BatchCheckItem{WorkId: workId, Source: source.Source, SQL: order.SQL, Error: err.Error()})
+			continue
+		}
+
+		if client == nil {
+			items = append(items, BatchCheckItem{
+				WorkId: workId, Source: source.Source, SQL: order.SQL,
+				Results: []engine.Record{{SQL: order.SQL, Level: 0, Status: "warn", Error: "SQL引擎未启动，跳过语法检测"}},
+			})
+			continue
+		}
+
+		var rs []engine.Record
+		if err := client.Call("Engine.Check", engine.CheckArgs{
+			SQL:      order.SQL,
+			Schema:   order.DataBase,
+			IP:       source.IP,
+			Username: source.Username,
+			Port:     source.Port,
+			Password: enc.Decrypt(model.C.General.SecretKey, source.Password),
+			CA:       source.CAFile,
+			Cert:     source.Cert,
+			Key:      source.KeyFile,
+			Kind:     order.Type,
+			Lang:     model.C.General.Lang,
+			Rule:     *rule,
+		}, &rs); err != nil {
+			items = append(items, BatchCheckItem{WorkId: workId, Source: source.Source, SQL: order.SQL, Error: err.Error()})
+			continue
+		}
+
+		items = append(items, BatchCheckItem{WorkId: workId, Source: source.Source, SQL: order.SQL, Results: rs})
+	}
+	return items
 }
 
 func delayKill(workId string) string {

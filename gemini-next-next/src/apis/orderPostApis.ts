@@ -151,6 +151,36 @@ export function batchAuditOrder(params: BatchAuditParams) {
   );
 }
 
+export interface BatchCheckRecord {
+  sql: string;
+  affect_rows: number;
+  status: string;
+  error: string;
+  level: number;
+}
+
+export interface BatchCheckItem {
+  work_id: string;
+  source: string;
+  sql: string;
+  results: BatchCheckRecord[];
+  error: string;
+}
+
+export function batchSQLCheck(workIds: string[]) {
+  return request.post<Res<BatchCheckItem[]>>(
+    `${COMMON_URI}/audit/order/batch_check`,
+    { work_ids: workIds }
+  );
+}
+
+export function batchRollback(workIds: string[]) {
+  return request.post<Res<BatchAuditResult>>(
+    `${COMMON_URI}/audit/order/batch_rollback`,
+    { work_ids: workIds }
+  );
+}
+
 export interface BatchOrderPostParams {
   source_ids: string[];
   sql: string;

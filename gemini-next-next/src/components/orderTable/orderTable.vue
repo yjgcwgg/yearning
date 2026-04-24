@@ -26,12 +26,22 @@
         "
       >
         <span>{{ $t('order.batch.selected', { count: selectedRowKeys.length }) }}</span>
-        <a-button type="primary" size="small" @click="batchAgree">{{
-          $t('order.batch.agree')
-        }}</a-button>
-        <a-button danger size="small" @click="showBatchReject">{{
-          $t('order.batch.reject')
-        }}</a-button>
+        <template v-if="selectedAuditKeys.length > 0">
+          <a-button type="primary" size="small" @click="batchAgree" :loading="batchCheckLoading">{{
+            $t('order.batch.agree')
+          }}</a-button>
+          <a-button danger size="small" @click="showBatchReject">{{
+            $t('order.batch.reject')
+          }}</a-button>
+        </template>
+        <a-button
+          v-if="selectedRollbackKeys.length > 0"
+          size="small"
+          type="primary"
+          ghost
+          @click="showBatchRollback"
+          :loading="batchRollbackLoading"
+        >{{ $t('order.batch.rollback') }} ({{ selectedRollbackKeys.length }})</a-button>
         <a-button size="small" @click="clearSelection">{{
           $t('order.batch.cancel')
         }}</a-button>
@@ -105,6 +115,103 @@
         ></a-textarea>
       </a-form-item>
     </a-modal>
+
+    <a-modal
+      v-model:visible="batchCheckVisible"
+      :title="$t('order.batch.check.title')"
+      width="900px"
+      @ok="confirmBatchAgreeAfterCheck"
+      :okText="$t('order.batch.check.confirm')"
+      :cancelText="$t('order.batch.check.cancel')"
+    >
+      <div style="max-height: 500px; overflow-y: auto">
+        <a-collapse>
+          <a-collapse-panel
+            v-for="item in batchCheckResults"
+            :key="item.work_id"
+          >
+            <template #header>
+              <span>
+                <a-tag v-if="item.error" color="red">{{ $t('order.batch.check.error') }}</a-tag>
+                <a-tag
+                  v-else-if="
+                    item.results &&
+                    item.results.some((r) => r.level !== 0)
+                  "
+                  color="orange"
+                >{{ $t('order.batch.check.warn') }}</a-tag>
+                <a-tag v-else color="green">{{ $t('order.batch.check.pass') }}</a-tag>
+                {{ item.work_id.substring(0, 8) }}... - {{ item.source }}
+              </span>
+            </template>
+            <div v-if="item.error" style="color: red; padding: 8px">
+              {{ item.error }}
+            </div>
+            <a-table
+              v-else-if="item.results && item.results.length > 0"
+              :dataSource="item.results"
+              :columns="checkColumns"
+              :pagination="false"
+              size="small"
+              :rowKey="(_: any, idx: number) => idx"
+            >
+              <template #bodyCell="{ column, text }">
+                <template v-if="column.dataIndex === 'level'">
+                  <a-tag v-if="text === 0" color="green">{{ $t('order.batch.check.pass') }}</a-tag>
+                  <a-tag v-else-if="text === 1" color="orange">{{ $t('order.batch.check.warn') }}</a-tag>
+                  <a-tag v-else-if="text === 2" color="red">Error</a-tag>
+                  <a-tag v-else color="blue">{{ text }}</a-tag>
+                </template>
+              </template>
+            </a-table>
+            <div v-else style="color: green; padding: 8px">
+              {{ $t('order.batch.check.no_issues') }}
+            </div>
+          </a-collapse-panel>
+        </a-collapse>
+      </div>
+      <div
+        v-if="hasCheckErrors(batchCheckResults)"
+        style="
+          margin-top: 12px;
+          padding: 8px;
+          background: #fff7e6;
+          border: 1px solid #ffd591;
+          border-radius: 4px;
+        "
+      >
+        <a-typography-text type="warning">
+          {{ $t('order.batch.check.has_errors') }}
+        </a-typography-text>
+      </div>
+    </a-modal>
+
+    <a-modal
+      v-model:visible="batchRollbackVisible"
+      :title="$t('order.batch.rollback.title')"
+      @ok="confirmBatchRollback"
+      :okText="$t('order.batch.rollback.confirm')"
+      :cancelText="$t('order.batch.check.cancel')"
+      :confirmLoading="batchRollbackSubmitting"
+    >
+      <p>{{ $t('order.batch.rollback.desc', { count: selectedRollbackKeys.length }) }}</p>
+      <a-collapse>
+        <a-collapse-panel
+          v-for="item in batchRollbackPreview"
+          :key="item.work_id"
+        >
+          <template #header>
+            <span>
+              <a-tag v-if="item.sql" color="green">{{ $t('order.batch.check.pass') }}</a-tag>
+              <a-tag v-else color="red">{{ $t('order.batch.rollback.no_sql') }}</a-tag>
+              {{ item.work_id.substring(0, 8) }}... - {{ item.source }}
+            </span>
+          </template>
+          <pre v-if="item.sql" style="white-space: pre-wrap; word-break: break-all; margin: 0; font-size: 12px">{{ item.sql }}</pre>
+          <div v-else style="color: #999">{{ $t('order.batch.rollback.no_sql') }}</div>
+        </a-collapse-panel>
+      </a-collapse>
+    </a-modal>
   </div>
 </template>
 
@@ -112,12 +219,16 @@
   import StateTags from './stateTags.vue';
   import OrderTableSearch from './orderTableSearch.vue';
   import { onBeforeRouteUpdate, useRoute } from 'vue-router';
-  import { onMounted, reactive, ref } from 'vue';
+  import { onMounted, reactive, ref, computed } from 'vue';
   import {
     OrderExpr,
     OrderParams,
     checkUri,
     batchAuditOrder,
+    batchSQLCheck,
+    BatchCheckItem,
+    batchRollback,
+    getOrderRollSQLS,
   } from '@/apis/orderPostApis';
   import { OrderTableData, OrderState } from '@/types';
   import { useStore } from '@/store';
@@ -165,48 +276,91 @@
 
   const batchRejectText = ref('');
 
+  const batchCheckVisible = ref(false);
+  const batchCheckResults = ref<BatchCheckItem[]>([]);
+  const batchCheckLoading = ref(false);
+
+  const batchRollbackVisible = ref(false);
+  const batchRollbackLoading = ref(false);
+  const batchRollbackSubmitting = ref(false);
+  const batchRollbackPreview = ref<{ work_id: string; source: string; sql: string }[]>([]);
+
+  const allTableData = ref<OrderTableData[]>([]);
+
+  const selectedAuditKeys = computed(() =>
+    selectedRowKeys.value.filter((key) => {
+      const row = allTableData.value.find((r) => r.work_id === key);
+      return row && row.status === 2;
+    })
+  );
+
+  const selectedRollbackKeys = computed(() =>
+    selectedRowKeys.value.filter((key) => {
+      const row = allTableData.value.find((r) => r.work_id === key);
+      return row && row.status === 1;
+    })
+  );
+
   const onSelectChange = (keys: string[]) => {
     selectedRowKeys.value = keys;
   };
 
-  const getCheckboxProps = (record: OrderTableData) => ({
-    disabled:
-      record.status !== 2 ||
-      !record.assigned.split(',').includes(store.state.user.account.user),
-  });
+  const getCheckboxProps = (record: OrderTableData) => {
+    const user = store.state.user.account.user;
+    const canAudit =
+      record.status === 2 &&
+      record.assigned.split(',').includes(user);
+    const canRollback = record.status === 1;
+    return { disabled: !(canAudit || canRollback) };
+  };
 
   const clearSelection = () => {
     selectedRowKeys.value = [];
   };
 
-  const batchAgree = () => {
-    Modal.confirm({
-      title: t('order.batch.agree.confirm', {
-        count: selectedRowKeys.value.length,
-      }),
-      onOk: async () => {
-        const { data } = await batchAuditOrder({
-          work_ids: selectedRowKeys.value,
-          tp: 'agree',
-        });
-        const result = data.payload;
-        const successCount = result.success ? result.success.length : 0;
-        const failedCount = result.failed ? result.failed.length : 0;
-        message.info(
-          t('order.batch.result', {
-            success: successCount,
-            failed: failedCount,
-          })
-        );
-        if (failedCount > 0) {
-          result.failed.forEach((item) => {
-            message.error(`${item.work_id}: ${item.error}`);
-          });
-        }
-        clearSelection();
-        tbl.value.manual();
-      },
+  const hasCheckErrors = (items: BatchCheckItem[]): boolean => {
+    return items.some(
+      (item) =>
+        item.error ||
+        (item.results && item.results.some((r) => r.level !== 0))
+    );
+  };
+
+  const batchAgree = async () => {
+    batchCheckLoading.value = true;
+    try {
+      const { data } = await batchSQLCheck(selectedRowKeys.value);
+      batchCheckResults.value = data.payload || [];
+      batchCheckVisible.value = true;
+    } catch (e) {
+      message.error(t('order.batch.check.fail'));
+    } finally {
+      batchCheckLoading.value = false;
+    }
+  };
+
+  const confirmBatchAgreeAfterCheck = async () => {
+    batchCheckVisible.value = false;
+    const { data } = await batchAuditOrder({
+      work_ids: selectedRowKeys.value,
+      tp: 'agree',
     });
+    const result = data.payload;
+    const successCount = result.success ? result.success.length : 0;
+    const failedCount = result.failed ? result.failed.length : 0;
+    message.info(
+      t('order.batch.result', {
+        success: successCount,
+        failed: failedCount,
+      })
+    );
+    if (failedCount > 0) {
+      result.failed.forEach((item) => {
+        message.error(`${item.work_id}: ${item.error}`);
+      });
+    }
+    clearSelection();
+    tbl.value.manual();
   };
 
   const showBatchReject = () => {
@@ -235,6 +389,89 @@
     clearSelection();
     tbl.value.manual();
   };
+
+  const showBatchRollback = async () => {
+    batchRollbackLoading.value = true;
+    try {
+      const previews: { work_id: string; source: string; sql: string }[] = [];
+      for (const key of selectedRollbackKeys.value) {
+        const row = allTableData.value.find((r) => r.work_id === key);
+        try {
+          const { data } = await getOrderRollSQLS(key, 1);
+          const sqls = (data.payload?.sql || [])
+            .map((r: { sql: string }) => r.sql)
+            .join('\n');
+          previews.push({
+            work_id: key,
+            source: row?.source || '',
+            sql: sqls,
+          });
+        } catch {
+          previews.push({ work_id: key, source: row?.source || '', sql: '' });
+        }
+      }
+      batchRollbackPreview.value = previews;
+      batchRollbackVisible.value = true;
+    } finally {
+      batchRollbackLoading.value = false;
+    }
+  };
+
+  const confirmBatchRollback = async () => {
+    batchRollbackSubmitting.value = true;
+    try {
+      const validKeys = batchRollbackPreview.value
+        .filter((item) => item.sql)
+        .map((item) => item.work_id);
+      if (validKeys.length === 0) {
+        message.warning(t('order.batch.rollback.no_valid'));
+        return;
+      }
+      const { data } = await batchRollback(validKeys);
+      const result = data.payload;
+      const successCount = result.success ? result.success.length : 0;
+      const failedCount = result.failed ? result.failed.length : 0;
+      message.info(
+        t('order.batch.result', { success: successCount, failed: failedCount })
+      );
+      if (failedCount > 0) {
+        result.failed.forEach((item) => {
+          message.error(`${item.work_id}: ${item.error}`);
+        });
+      }
+      batchRollbackVisible.value = false;
+      clearSelection();
+      tbl.value.manual();
+    } finally {
+      batchRollbackSubmitting.value = false;
+    }
+  };
+
+  const checkColumns = [
+    { title: t('order.batch.check.col.level'), dataIndex: 'level', width: 80 },
+    {
+      title: t('order.batch.check.col.status'),
+      dataIndex: 'status',
+      ellipsis: true,
+      width: 120,
+    },
+    {
+      title: t('order.batch.check.col.error'),
+      dataIndex: 'error',
+      ellipsis: true,
+    },
+    {
+      title: t('order.batch.check.col.sql'),
+      dataIndex: 'sql',
+      ellipsis: true,
+      width: 300,
+    },
+    {
+      title: t('order.batch.check.col.affect'),
+      dataIndex: 'affect_rows',
+      width: 80,
+    },
+  ];
 
   const tblRef = reactive<tableRef>({
     col: [
@@ -307,6 +544,7 @@
           let payload = JSON.parse(event.data);
           tblRef.data = payload.payload.data;
           tblRef.pageCount = payload.payload.page;
+          allTableData.value = payload.payload.data || [];
         },
       }
     ),
