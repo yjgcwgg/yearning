@@ -28,8 +28,13 @@ export default {
     'Allows fields to be typed (converted between different fields or changed from long to short in length). For example :int -> bigint,int(50) -> int(20))',
   DDLAllowChangeColumnPosition: 'After /first is allowed',
   AllowCreateView: 'Allow creation of views',
+  AllowCrateViewWithSelectStar: 'Allow creating views with SELECT *',
   AllowCreatePartition: 'Allow partition creation',
   AllowSpecialType: 'Bit,enum, and SET fields are allowed',
+  DDLEnableForeignKey: 'Allow foreign keys',
+  DDLTablePrefix: 'Specify table name prefix',
+  DDLColumnsMustHaveIndex: 'Columns that must have an index. Separate with commas. Format: column_name [column_type],...',
+  PRIRollBack: 'Enable primary-key based DML rollback',
   SupportCollation:
     'The Collate range allowed when CREATE/ALTER a table or field. Use commas to separate multiple items',
   SupportCharset:
@@ -48,6 +53,7 @@ export default {
   DDLImplicitTypeConversion: 'Implicit conversions are not allowed',
   DMLInsertColumns:
     'Check whether the field name inserted in the Insert statement exists',
+  DMLInsertMustExplicitly: 'Force INSERT statements to explicitly declare columns',
   DMLWhere: 'Enforce that DML statements must have a WHERE condition',
   DMLOrder: 'Disallow DML statements from using the Order BY clause',
   DMLSelect: 'Disallow Select clauses for DML statements',

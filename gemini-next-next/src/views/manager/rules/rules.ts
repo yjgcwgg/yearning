@@ -143,6 +143,12 @@ const rule: Rule[] = [
     tp: 0,
   },
   {
+    name: 'AllowCrateViewWithSelectStar',
+    desc: t('AllowCrateViewWithSelectStar'),
+    type: 'DDL',
+    tp: 0,
+  },
+  {
     name: 'AllowCreatePartition',
     desc: t('AllowCreatePartition'),
     type: 'DDL',
@@ -151,6 +157,30 @@ const rule: Rule[] = [
   {
     name: 'AllowSpecialType',
     desc: t('AllowSpecialType'),
+    type: 'DDL',
+    tp: 0,
+  },
+  {
+    name: 'DDLEnableForeignKey',
+    desc: t('DDLEnableForeignKey'),
+    type: 'DDL',
+    tp: 0,
+  },
+  {
+    name: 'DDLTablePrefix',
+    desc: t('DDLTablePrefix'),
+    type: 'DDL',
+    tp: 2,
+  },
+  {
+    name: 'DDLColumnsMustHaveIndex',
+    desc: t('DDLColumnsMustHaveIndex'),
+    type: 'DDL',
+    tp: 2,
+  },
+  {
+    name: 'PRIRollBack',
+    desc: t('PRIRollBack'),
     type: 'DDL',
     tp: 0,
   },
@@ -235,6 +265,12 @@ const rule: Rule[] = [
   {
     name: 'DMLInsertColumns',
     desc: t('DMLInsertColumns'),
+    type: 'DML',
+    tp: 0,
+  },
+  {
+    name: 'DMLInsertMustExplicitly',
+    desc: t('DMLInsertMustExplicitly'),
     type: 'DML',
     tp: 0,
   },

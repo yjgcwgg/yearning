@@ -24,8 +24,13 @@ export default {
     '允许字段进行类型转换(不同字段之间的转换或长度从长变短。如:int -> bigint,int(50) -> int(20))',
   DDLAllowChangeColumnPosition: '允许使用after/first',
   AllowCreateView: '允许创建视图',
+  AllowCrateViewWithSelectStar: '允许创建带 SELECT * 的视图',
   AllowCreatePartition: '允许创建分区',
   AllowSpecialType: '允许添加bit,enum,set类型字段',
+  DDLEnableForeignKey: '允许使用外键',
+  DDLTablePrefix: '指定表名前缀',
+  DDLColumnsMustHaveIndex: '指定列必须拥有索引。多个列请使用逗号分隔，格式: 列名 [列类型],...',
+  PRIRollBack: '启用基于主键的DML回滚',
   SupportCollation:
     'create/alter 表或字段时允许的Collate范围。多个请使用逗号进行分割',
   SupportCharset:
@@ -41,6 +46,7 @@ export default {
   DMLAllowInsertNull: '允许insert语句插入null值',
   DDLImplicitTypeConversion: '不允许隐式转换',
   DMLInsertColumns: '检查Insert语句中插入的字段名是否存在',
+  DMLInsertMustExplicitly: '强制Insert语句必须显式声明字段',
   DMLWhere: '强制DML语句必须拥有where条件',
   DMLOrder: '禁止DML语句使用Order by子句',
   DMLSelect: '禁止DML语句使用Select子句',
