@@ -299,6 +299,11 @@ func BatchRollbackHandler(c yee.Context) (err error) {
 			continue
 		}
 
+		var allAuditors []string
+		for _, s := range steps {
+			allAuditors = append(allAuditors, s.Auditor...)
+		}
+
 		newOrder.WorkId = factory.GenWorkId()
 		newOrder.Username = user.Username
 		newOrder.RealName = user.RealName
@@ -306,6 +311,7 @@ func BatchRollbackHandler(c yee.Context) (err error) {
 		newOrder.Status = 2
 		newOrder.CurrentStep = 1
 		newOrder.Assigned = strings.Join(steps[1].Auditor, ",")
+		newOrder.Relevant = factory.JsonStringify(allAuditors)
 
 		model.DB().Create(&newOrder)
 		model.DB().Create(&model.CoreWorkflowDetail{
